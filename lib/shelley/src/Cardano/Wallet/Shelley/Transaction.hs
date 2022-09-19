@@ -1550,7 +1550,8 @@ data TxSkeleton = TxSkeleton
     , txInputCount :: !Int
     , txOutputs :: ![TxOut]
     , txChange :: ![Set AssetId]
-    , txScripts :: [Script KeyHash]
+    , txNativeScripts :: [Script KeyHash]
+    , txMintOrBurnScripts :: [Script KeyHash]
     , txAssetsToMintOrBurn :: Set AssetId
     -- ^ The set of assets to mint or burn.
     , txScriptExecutionCost :: !Coin
@@ -1570,7 +1571,8 @@ emptyTxSkeleton txWitnessTag = TxSkeleton
     , txInputCount = 0
     , txOutputs = []
     , txChange = []
-    , txScripts = []
+    , txNativeScripts = []
+    , txMintOrBurnScripts = []
     , txAssetsToMintOrBurn = Set.empty
     , txScriptExecutionCost = Coin 0
     }
@@ -1593,10 +1595,11 @@ mkTxSkeleton witness context skeleton = TxSkeleton
     , txInputCount = view #skeletonInputCount skeleton
     , txOutputs = view #skeletonOutputs skeleton
     , txChange = view #skeletonChange skeleton
-    , txScripts =
-        (Map.elems (snd $ view #txAssetsToMint context)) <>
-        (Map.elems (snd $ view #txAssetsToBurn context)) <>
+    , txNativeScripts =
         L.nub (Map.elems $ view #txNativeScriptInputs context)
+    , txMintOrBurnScripts = (<>)
+        (Map.elems (snd $ view #txAssetsToMint context))
+        (Map.elems (snd $ view #txAssetsToBurn context))
     , txAssetsToMintOrBurn = (<>)
         (TokenMap.getAssets (fst $ view #txAssetsToMint context))
         (TokenMap.getAssets (fst $ view #txAssetsToBurn context))
@@ -1805,7 +1808,8 @@ estimateTxSize era skeleton =
         , txInputCount
         , txOutputs
         , txChange
-        , txScripts
+        , txNativeScripts
+        , txMintOrBurnScripts
         , txAssetsToMintOrBurn
         } = skeleton
 
@@ -1820,7 +1824,7 @@ estimateTxSize era skeleton =
 
     -- Total number of signatures the scripts require
     numberOf_ScriptVkeyWitnesses
-        = sumVia scriptRequiredKeySigs txScripts
+        = sumVia scriptRequiredKeySigs (txMintOrBurnScripts ++ txNativeScripts)
 
     scriptRequiredKeySigs :: Num num => Script KeyHash -> num
     scriptRequiredKeySigs = \case
@@ -1862,7 +1866,7 @@ estimateTxSize era skeleton =
         = sizeOf_SmallArray
         + sizeOf_TransactionBody
         + sizeOf_WitnessSet
-        + sizeOf_Metadata
+        + sizeOf_AuxiliaryData
 
     -- transaction_body =
     --   { 0 : set<transaction_input>
@@ -1955,11 +1959,24 @@ estimateTxSize era skeleton =
         sizeOf_Mint AssetId{tokenName}
           = sizeOf_MultiAsset sizeOf_Int64 tokenName
 
-    -- For metadata, we can't choose a reasonable upper bound, so it's easier to
-    -- measure the serialize data since we have it anyway. When it's "empty",
-    -- metadata are represented by a special "null byte" in CBOR `F6`.
+    sizeOf_AuxiliaryDataNativeScripts
+         = sizeOf_SmallArray
+         + sizeOf_SmallMap
+         + sizeOf_SmallArray
+         + sizeOf_NativeScripts txNativeScripts
+
     sizeOf_Metadata
-        = maybe 1 (toInteger . BS.length . serialiseToCBOR) txMetadata
+        = maybe 0 (toInteger . BS.length . serialiseToCBOR) txMetadata
+
+    -- / #6.259({ ? 0 => metadata         ; Alonzo and beyond
+    --  , ? 1 => [ * native_script ]
+    --  , ? 2 => [ * plutus_v1_script ]
+    --  , ? 3 => [ * plutus_v2_script ]
+    --  })
+    sizeOf_AuxiliaryData
+        = sizeOf_SmallMap
+        + sizeOf_Metadata
+        + sizeOf_AuxiliaryDataNativeScripts
 
     -- transaction_input =
     --   [ transaction_id : $hash32
@@ -2122,6 +2139,15 @@ estimateTxSize era skeleton =
         = sizeOf_Hash28
         + sizeOf_LargeUInt
 
+
+    -- [* native_script ]
+    sizeOf_NativeScripts []
+        = 0
+    sizeOf_NativeScripts ss
+        = sizeOf_Array
+        + sizeOf_SmallUInt
+        + sumVia sizeOf_NativeScript ss
+
     -- transaction_witness_set =
     --   { ?0 => [* vkeywitness ]
     --   , ?1 => [* multisig_script ]
@@ -2130,7 +2156,7 @@ estimateTxSize era skeleton =
     sizeOf_WitnessSet
         = sizeOf_SmallMap
         + sizeOf_VKeyWitnesses
-        + sizeOf_NativeScripts txScripts
+        + sizeOf_NativeScripts (txMintOrBurnScripts ++ txNativeScripts)
         + sizeOf_BootstrapWitnesses
       where
         -- ?0 => [* vkeywitness ]
@@ -2140,12 +2166,6 @@ estimateTxSize era skeleton =
             + sizeOf_VKeyWitness * numberOf_VkeyWitnesses
 
         -- ?1 => [* native_script ]
-        sizeOf_NativeScripts []
-            = 0
-        sizeOf_NativeScripts ss
-            = sizeOf_Array
-            + sizeOf_SmallUInt
-            + sumVia sizeOf_NativeScript ss
 
         -- ?2 => [* bootstrap_witness ]
         sizeOf_BootstrapWitnesses
