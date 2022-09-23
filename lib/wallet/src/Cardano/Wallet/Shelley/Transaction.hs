@@ -85,12 +85,16 @@ import Cardano.Crypto.Wallet
     ( XPub )
 import Cardano.Ledger.Alonzo.Tools
     ( evaluateTransactionExecutionUnits )
+import Cardano.Ledger.Alonzo.TxInfo
+    ( languages )
 import Cardano.Ledger.Crypto
     ( DSIGN )
 import Cardano.Ledger.Era
     ( Crypto, Era, ValidateScript (..) )
 import Cardano.Ledger.Shelley.API
     ( StrictMaybe (..) )
+import Cardano.Ledger.Shelley.UTxO
+    ( scriptsNeeded )
 import Cardano.Slotting.EpochInfo
     ( EpochInfo )
 import Cardano.Slotting.EpochInfo.API
@@ -1341,26 +1345,23 @@ _assignScriptRedeemers pparams ti utxo redeemers tx =
             }
 
     addScriptIntegrityHashBabbage
-        :: forall e. ( e ~ Cardano.ShelleyLedgerEra Cardano.BabbageEra )
+        :: era ~ Cardano.BabbageEra
         => BabbageTx
         -> BabbageTx
     addScriptIntegrityHashBabbage babbageTx =
         let
-            wits  = Alonzo.wits babbageTx
-            langs =
-                [ l
-                | (_hash, script) <- Map.toList (Alonzo.txscripts wits)
-                , (not . isNativeScript @e) script
-                , Just l <- [Alonzo.language script]
-                ]
+            wits  = Babbage.wits babbageTx
+            babbageUTxO = fromCardanoUTxO utxo
+            scripts = scriptsNeeded babbageUTxO babbageTx
+            langs = languages babbageTx babbageUTxO scripts
         in
         babbageTx
             { Babbage.body = (Babbage.body babbageTx)
                 { Babbage.scriptIntegrityHash = Alonzo.hashScriptIntegrity
-                    (Set.fromList $ Alonzo.getLanguageView
+                    (Set.map (Alonzo.getLanguageView
                         (Cardano.toLedgerPParams
-                            Cardano.ShelleyBasedEraBabbage pparams)
-                        <$> langs)
+                            Cardano.ShelleyBasedEraBabbage pparams))
+                        langs)
                     (Alonzo.txrdmrs wits)
                     (Alonzo.txdats wits)
                 }
