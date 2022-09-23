@@ -25,6 +25,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -1101,24 +1102,57 @@ data ApiExternalInput (n :: NetworkDiscriminant) = ApiExternalInput
     , address :: !(ApiT Address, Proxy n)
     , amount :: !(Quantity "lovelace" Natural)
     , assets :: !(ApiT W.TokenMap)
-    , datum :: !(Maybe (ApiT WriteTx.DatumHash))
+    , datum :: !(ApiT WriteTx.Datum)
+    , script :: !(Maybe (ApiT WriteTx.Script))
     } deriving (Eq, Generic, Show, Typeable)
 
-instance FromJSON (ApiT WriteTx.DatumHash) where
-    parseJSON = withText "DatumHash" $ \hex -> maybeToParser $ do
+pattern AsList :: [(Aeson.Key, Aeson.Value)] -> Aeson.KeyMap Aeson.Value
+pattern AsList l <- (Aeson.toList -> l)
+
+instance FromJSON (ApiT WriteTx.Datum) where
+    parseJSON v = ApiT <$> case v of
+        Null
+            -> pure WriteTx.NoDatum
+        Object (AsList [("inline", String hex)]) -> maybeToParser $ do
             bytes <- parseHex hex
-            ApiT <$> WriteTx.datumHashFromBytes bytes
+            eitherToMaybe (WriteTx.datumFromBytes bytes)
+        Object (AsList [("hash", String hex)]) -> maybeToParser $ do
+            bytes <- parseHex hex
+            WriteTx.datumHashFromBytes bytes
+        _ -> failWithHelp
+
       where
         maybeToParser = maybe failWithHelp pure
         failWithHelp = fail $ mconcat
-            [ "expected <hex of valid datum hash>"
+            [ "expected either "
+            , "{\"inline\": \"<hex of valid datum cbor>\"}"
+            , ", "
+            , "{\"hash\": \"<hex of valid hash>\"}"
+            , " or null"
             ]
 
         parseHex :: Text -> Maybe ByteString
         parseHex = eitherToMaybe . fromHexText
 
-instance ToJSON (ApiT WriteTx.DatumHash) where
-    toJSON (ApiT dh) = String $ hexText $ WriteTx.datumHashToBytes dh
+instance ToJSON (ApiT WriteTx.Datum) where
+    toJSON (ApiT (WriteTx.Datum datum)) =
+        object
+            [ "inline" .= String (hexText $ WriteTx.datumToBytes datum)
+            ]
+    toJSON (ApiT (WriteTx.DatumHash hash)) =
+        object
+            [ "hash" .= String (hexText $ WriteTx.datumHashToBytes hash)
+            ]
+    toJSON (ApiT WriteTx.NoDatum) = Aeson.Null
+
+instance FromJSON (ApiT WriteTx.Script) where
+    parseJSON =
+        fmap (ApiT . WriteTx.scriptFromCardanoScriptInAnyLang)
+        . parseJSON
+
+instance ToJSON (ApiT WriteTx.Script) where
+    toJSON (ApiT s) =
+        toJSON $ WriteTx.scriptToCardanoScriptInAnyLang s
 
 data ApiBalanceTransactionPostData (n :: NetworkDiscriminant) = ApiBalanceTransactionPostData
     { transaction :: !(ApiT SealedTx)

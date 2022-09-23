@@ -32,11 +32,13 @@ module Cardano.Wallet.Write.Tx
     , Value
 
     -- ** Datum
-    , type DatumHash
+    , type Datum
     , pattern Alonzo.Datum
     , pattern Alonzo.DatumHash
     , pattern Alonzo.NoDatum
+    , datumFromBytes
     , datumHashFromBytes
+    , datumToBytes
     , datumHashToBytes
 
     -- ** Script
@@ -211,14 +213,21 @@ scriptToCardanoScriptInAnyLang =
     latestEra = Cardano.ShelleyBasedEraBabbage
 
 
-type DatumHash = Alonzo.DataHash StandardCrypto
+type Datum = Alonzo.Datum (Babbage.BabbageEra StandardCrypto)
 
-datumHashFromBytes :: ByteString -> Maybe DatumHash
+datumFromBytes :: ByteString -> Either String Datum
+datumFromBytes =
+    fmap Alonzo.Datum . Alonzo.makeBinaryData . toShort
+
+datumHashFromBytes :: ByteString -> Maybe Datum
 datumHashFromBytes =
-    fmap unsafeMakeSafeHash <$> Crypto.hashFromBytes
+    fmap (Alonzo.DatumHash . unsafeMakeSafeHash) <$> Crypto.hashFromBytes
 
 datumHashToBytes :: SafeHash crypto a -> ByteString
 datumHashToBytes = Crypto.hashToBytes . extractHash
+
+datumToBytes :: Alonzo.BinaryData StandardBabbage -> ByteString
+datumToBytes = CBOR.serialize'
 
 -- | Union type essentially representing the union
 -- @Data.These latestEraTxOut prevEraTxOut@.
