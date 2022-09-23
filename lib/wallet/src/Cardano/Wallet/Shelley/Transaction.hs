@@ -199,6 +199,8 @@ import Cardano.Wallet.Transaction
     )
 import Cardano.Wallet.Util
     ( internalError, modifyM )
+import Cardano.Wallet.Write.Tx
+    ( fromCardanoUTxO )
 import Codec.Serialise
     ( deserialiseOrFail )
 import Control.Arrow
@@ -245,6 +247,8 @@ import GHC.Generics
     ( Generic )
 import Numeric.Natural
     ( Natural )
+import Ouroboros.Consensus.Shelley.Eras
+    ( StandardAlonzo )
 import Ouroboros.Network.Block
     ( SlotNo )
 
@@ -268,9 +272,7 @@ import qualified Cardano.Ledger.Coin as Ledger
 import qualified Cardano.Ledger.Core as Ledger
 import qualified Cardano.Ledger.Serialization as Ledger
 import qualified Cardano.Ledger.Shelley.Address.Bootstrap as SL
-import qualified Cardano.Ledger.Shelley.Tx as Shelley
-import qualified Cardano.Ledger.Shelley.UTxO as Shelley
-import qualified Cardano.Ledger.Shelley.UTxO as Ledger
+import qualified Cardano.Ledger.Shelley.API as Shelley
 import qualified Cardano.Ledger.ShelleyMA.TxBody as ShelleyMA
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
@@ -674,7 +676,6 @@ newTransactionLayer networkId = TransactionLayer
 
     , updateTx = updateSealedTx
 
-    , toCardanoUTxO = _toCardanoUTxO
     , fromCardanoTxOut = Compatibility.fromCardanoTxOut
     , fromCardanoTxIn = Compatibility.fromCardanoTxIn
     }
@@ -710,81 +711,6 @@ _evaluateTransactionBalance (Cardano.Tx body _) pp utxo =
     lovelaceFromCardanoTxOutValue = \case
         Cardano.TxOutAdaOnly _ ada -> Cardano.lovelaceToValue ada
         Cardano.TxOutValue _ val   -> val
-
-_toCardanoUTxO
-    :: forall era. IsShelleyBasedEra era
-    => UTxO
-    -> [(TxIn, TxOut, Maybe (Hash "Datum"))]
-    -> Cardano.UTxO era
-_toCardanoUTxO utxo extraUTxO =
-    let
-        utxo' = Map.fromList
-            . map (bimap toCardanoTxIn (toCardanoTxOut era))
-            . Map.toList
-            $ unUTxO utxo
-
-        extraUTxO' = Map.fromList
-            . map (\(i, o, mDatumHash) ->
-                (toCardanoTxIn i
-                , setDatumHash era mDatumHash (toCardanoTxOut era o))
-                )
-            $ extraUTxO
-    in
-        -- The two UTxO sets could overlap here. When called by
-        -- 'balanceTransaction' the user-specified input resolution
-        -- will overwrite the wallet UTxO (if in conflict).
-        --
-        -- If the overridden outputs are incorrect, the wallet will
-        -- incorrectly calculate the balance, and the transaction
-        -- will ultimately be rejected by the node.
-        --
-        -- If the overwritten outputs simply add datum hashes
-        -- (which the wallet cannot currently represent), this
-        -- shouldn't affect the balance.
-        --
-        -- Ultimately, however, it might be be wiser to error out of
-        -- caution.
-        --
-        -- NOTE: There is a similar case in the 'resolveInput' of
-        -- 'balanceTransaction'.
-        Cardano.UTxO $ extraUTxO' <> utxo' -- Left-bias
-  where
-    era = Cardano.shelleyBasedEra @era
-
-    setDatumHash
-        :: ShelleyBasedEra era
-        -> Maybe (Hash "Datum")
-        -> Cardano.TxOut ctx era
-        -> Cardano.TxOut ctx era
-    setDatumHash _era Nothing o = o
-    setDatumHash _era
-        (Just (Hash datumHash)) (Cardano.TxOut addr val _ refScript) =
-            Cardano.TxOut addr val
-                (Cardano.TxOutDatumHash scriptDataSupported hash) refScript
-      where
-        scriptDataSupported = case era of
-            ShelleyBasedEraBabbage -> Cardano.ScriptDataInBabbageEra
-            ShelleyBasedEraAlonzo -> Cardano.ScriptDataInAlonzoEra
-            ShelleyBasedEraMary -> errBadEra
-            ShelleyBasedEraAllegra -> errBadEra
-            ShelleyBasedEraShelley -> errBadEra
-          where
-            -- FIXME [ADP-1479] Proper error handling
-            errBadEra = error $ unwords
-                [ "_toCardanoUTxO:"
-                , "cannot add a datum hash to the transaction body of an"
-                , "era that doesn't support datum hashes."
-                ]
-        hash = fromMaybe errBadHash $ Cardano.deserialiseFromRawBytes
-            (Cardano.AsHash Cardano.AsScriptData)
-            datumHash
-          where
-            -- FIXME [ADP-1479] Proper error handling
-            errBadHash = error $ unwords
-                [ "_toCardanoUTxO: couldn't convert hash "
-                , show datumHash
-                ]
-
 
 mkDelegationCertificates
     :: DelegationAction
@@ -1295,7 +1221,7 @@ _assignScriptRedeemers pparams ti utxo redeemers tx =
         let res = evaluateTransactionExecutionUnits
                 pparams'
                 alonzoTx
-                (toLedgerUTxO utxo)
+                (fromCardanoUTxO utxo)
                 epochInfo
                 systemStart
                 costs
@@ -1321,7 +1247,7 @@ _assignScriptRedeemers pparams ti utxo redeemers tx =
         let res = evaluateTransactionExecutionUnits
                 pparams'
                 babbageTx
-                (toLedgerUTxO utxo)
+                (fromCardanoUTxO utxo)
                 epochInfo
                 systemStart
                 costs
@@ -1398,7 +1324,7 @@ _assignScriptRedeemers pparams ti utxo redeemers tx =
             langs =
                 [ l
                 | (_hash, script) <- Map.toList (Alonzo.txscripts wits)
-                , (not . isNativeScript @e) script
+                , (not . isNativeScript @StandardAlonzo) script
                 , Just l <- [Alonzo.language script]
                 ]
         in
@@ -2530,18 +2456,3 @@ explicitFees era = case era of
         Cardano.TxFeeExplicit Cardano.TxFeesExplicitInAlonzoEra
     ShelleyBasedEraBabbage ->
         Cardano.TxFeeExplicit Cardano.TxFeesExplicitInBabbageEra
-
-toLedgerUTxO
-    :: forall era.
-        ( Cardano.IsShelleyBasedEra era
-        , Crypto (Cardano.ShelleyLedgerEra era) ~ Compatibility.StandardCrypto
-        )
-    => Cardano.UTxO era
-    -> Ledger.UTxO (Cardano.ShelleyLedgerEra era)
-toLedgerUTxO =
-    Shelley.UTxO
-    . Map.mapKeys Cardano.toShelleyTxIn
-    . Map.map (Cardano.toShelleyTxOut (shelleyBasedEra @era))
-    . unCardanoUTxO
-  where
-    unCardanoUTxO (Cardano.UTxO m) = m

@@ -1,0 +1,349 @@
+{-# LANGUAGE ExplicitNamespaces #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+module Cardano.Wallet.Write.Tx
+    (
+    -- * RecentEra
+      RecentEra (..)
+    , IsRecentEra (..)
+    , isRecentEra
+
+    -- ** Helpers for cardano-api compatibility
+    , cardanoEra
+    , shelleyBasedEra
+
+    -- ** Existential wrapper
+    , InAnyRecentEra (..)
+    , asAnyRecentEra
+    , withRecentEra
+
+    -- * TxOut
+    , Babbage.TxOut (..) -- FIXME!
+    , TxOutInRecentEra -- opaque
+    , wrapTxOutInRecentEra
+    , unwrapTxOutInRecentEra
+    , ErrInvalidTxOutInEra (..)
+
+    -- ** Value
+    , Value
+
+    -- ** Datum
+    , type DatumHash
+    , pattern Alonzo.Datum
+    , pattern Alonzo.DatumHash
+    , pattern Alonzo.NoDatum
+    , datumHashFromBytes
+    , datumHashToBytes
+
+    -- ** Script
+    , type Script
+    , scriptFromBytes
+    , scriptFromCardanoScriptInAnyLang
+    , scriptToCardanoScriptInAnyLang
+
+    -- * TxIn
+    , TxIn
+
+    -- * UTxO
+    , Shelley.UTxO
+    , utxoFromTxOutsInRecentEra
+    , toCardanoUTxO
+    , fromCardanoUTxO
+
+    )
+    where
+
+import Prelude
+
+import Cardano.Api
+    ( AlonzoEra, BabbageEra, CardanoEra (..) )
+import Cardano.Api.Shelley
+    ( ShelleyLedgerEra )
+import Cardano.Ledger.Crypto
+    ( StandardCrypto )
+import Cardano.Ledger.Era
+    ( Crypto )
+import Cardano.Ledger.Mary
+    ( Value )
+import Cardano.Ledger.SafeHash
+    ( SafeHash, extractHash, unsafeMakeSafeHash )
+import Data.ByteString
+    ( ByteString )
+import Data.ByteString.Lazy
+    ( fromStrict )
+import Data.ByteString.Short
+    ( toShort )
+import Data.Maybe
+    ( fromMaybe )
+import Data.Maybe.Strict
+    ( StrictMaybe (..) )
+import Ouroboros.Consensus.Cardano.Block
+    ( StandardBabbage )
+
+import qualified Cardano.Api as Cardano
+import qualified Cardano.Api.Extra as Cardano
+import qualified Cardano.Api.Shelley as Cardano
+import qualified Cardano.Binary as CBOR
+import qualified Cardano.Crypto.Hash.Class as Crypto
+import qualified Cardano.Ledger.Alonzo.Data as Alonzo
+import qualified Cardano.Ledger.Alonzo.Scripts as Alonzo
+import qualified Cardano.Ledger.Alonzo.TxBody as Alonzo
+import qualified Cardano.Ledger.Babbage as Babbage
+import qualified Cardano.Ledger.Babbage.TxBody as Babbage
+import qualified Cardano.Ledger.Core as Core
+import qualified Cardano.Ledger.Shelley.UTxO as Shelley
+import qualified Cardano.Ledger.TxIn as Ledger
+import qualified Data.Map as Map
+
+--------------------------------------------------------------------------------
+-- RecentEra
+--------------------------------------------------------------------------------
+
+-- TODO: Switch away from @Cardano.Api@, including the @Cardano.CardanoEra@.
+data RecentEra era where
+    RecentEraBabbage :: RecentEra BabbageEra
+    RecentEraAlonzo :: RecentEra AlonzoEra
+
+class Cardano.IsShelleyBasedEra era => IsRecentEra era where
+    recentEra :: RecentEra era
+
+-- | Return a proof that the wallet can create txs in this era, or @Nothing@.
+isRecentEra :: CardanoEra era -> Maybe (RecentEra era)
+isRecentEra BabbageEra = Just RecentEraBabbage
+isRecentEra AlonzoEra = Just RecentEraAlonzo
+isRecentEra MaryEra = Nothing
+isRecentEra AllegraEra = Nothing
+isRecentEra ShelleyEra = Nothing
+isRecentEra ByronEra = Nothing
+
+instance IsRecentEra Cardano.BabbageEra where
+    recentEra = RecentEraBabbage
+
+instance IsRecentEra Cardano.AlonzoEra where
+    recentEra = RecentEraAlonzo
+
+cardanoEraFromRecentEra :: RecentEra era -> Cardano.CardanoEra era
+cardanoEraFromRecentEra =
+    Cardano.shelleyBasedToCardanoEra
+    . shelleyBasedEraFromRecentEra
+
+shelleyBasedEraFromRecentEra :: RecentEra era -> Cardano.ShelleyBasedEra era
+shelleyBasedEraFromRecentEra RecentEraBabbage = Cardano.ShelleyBasedEraBabbage
+shelleyBasedEraFromRecentEra RecentEraAlonzo = Cardano.ShelleyBasedEraAlonzo
+
+-- | For convenience working with 'IsRecentEra'. Similar to 'Cardano.cardanoEra,
+-- but with a 'IsRecentEra era' constraint instead of 'Cardano.IsCardanoEra.
+cardanoEra :: forall era. IsRecentEra era => Cardano.CardanoEra era
+cardanoEra = cardanoEraFromRecentEra $ recentEra @era
+
+-- | For convenience working with 'IsRecentEra'. Similar to
+-- 'Cardano.shelleyBasedEra, but with a 'IsRecentEra era' constraint instead of
+-- 'Cardano.IsShelleyBasedEra'.
+shelleyBasedEra :: forall era. IsRecentEra era => Cardano.ShelleyBasedEra era
+shelleyBasedEra = shelleyBasedEraFromRecentEra $ recentEra @era
+
+data InAnyRecentEra thing where
+     InAnyRecentEra :: IsRecentEra era -- Provide class constraint
+                    => RecentEra era   -- and explicit value.
+                    -> thing era
+                    -> InAnyRecentEra thing
+
+
+withRecentEra
+    :: InAnyRecentEra thing
+    -> (forall era. IsRecentEra era => thing era -> a)
+    -> a
+withRecentEra (InAnyRecentEra _era tx) f
+    = f tx
+
+-- | "Downcast" something existentially wrapped in 'Cardano.InAnyCardanoEra'.
+asAnyRecentEra
+    :: Cardano.InAnyCardanoEra a
+    -> Maybe (InAnyRecentEra a)
+asAnyRecentEra = \case
+    Cardano.InAnyCardanoEra BabbageEra a ->
+        Just $ InAnyRecentEra RecentEraBabbage a
+    Cardano.InAnyCardanoEra AlonzoEra a ->
+        Just $ InAnyRecentEra RecentEraAlonzo a
+    _ -> Nothing
+
+--------------------------------------------------------------------------------
+-- TxIn
+--------------------------------------------------------------------------------
+
+type TxIn = Ledger.TxIn StandardCrypto
+
+--------------------------------------------------------------------------------
+-- TxOut
+--------------------------------------------------------------------------------
+
+-- type TxOut era = Core.TxOut era FIXME
+
+type Script = Alonzo.Script (Babbage.BabbageEra StandardCrypto)
+-- NOTE: Era only used for its 'Crypto era'
+
+scriptFromBytes :: ByteString -> Either CBOR.DecoderError Script
+scriptFromBytes bs = CBOR.decodeAnnotator "Script" CBOR.fromCBOR (fromStrict bs)
+
+scriptFromCardanoScriptInAnyLang
+    :: Cardano.ScriptInAnyLang
+    -> Script
+scriptFromCardanoScriptInAnyLang
+    = Cardano.toShelleyScript
+    . fromMaybe (error "all valid scripts should be valid in latest era")
+    . Cardano.toScriptInEra latestEra
+  where
+    latestEra = Cardano.BabbageEra
+
+scriptToCardanoScriptInAnyLang
+    :: Script
+    -> Cardano.ScriptInAnyLang
+scriptToCardanoScriptInAnyLang =
+    rewrap
+    . Cardano.fromShelleyBasedScript latestEra
+  where
+    rewrap (Cardano.ScriptInEra _ s) = Cardano.toScriptInAnyLang s
+
+    latestEra = Cardano.ShelleyBasedEraBabbage
+
+
+type DatumHash = Alonzo.DataHash StandardCrypto
+
+datumHashFromBytes :: ByteString -> Maybe DatumHash
+datumHashFromBytes =
+    fmap unsafeMakeSafeHash <$> Crypto.hashFromBytes
+
+datumHashToBytes :: SafeHash crypto a -> ByteString
+datumHashToBytes = Crypto.hashToBytes . extractHash
+
+-- | Union type essentially representing the union
+-- @Data.These latestEraTxOut prevEraTxOut@.
+--
+-- Assumes @TxOut latestEra ⊇ TxOut prevEra@ in the sense that the latest era
+-- has not removed information from the @TxOut@. This is allows e.g.
+-- @ToJSON@ / @FromJSON@ instances to be written for two eras with only one
+-- implementation.
+--
+-- == Alternative implementation 1:
+--
+-- @@
+-- data TxOutAny = TxOutAny
+--    (Addr StandardCrypto)
+--    Value
+--    Datum
+--    StrictMaybe (Core.Script Babbage)
+-- @@
+--
+-- However, even though the @era@ is seemingly only needed to obtain
+-- @Timelock (Crypto era)@, we need to provide @Core.Script@ with an @era@,
+-- which would need to lie and be able to represent both recent eras.
+--
+-- == Alternative implementation 2:
+--
+-- Move @ToJSON@ and @FromJSON@ instance from the API to this module, which
+-- would at least keep this "hack" confined to this module.
+newtype TxOutInRecentEra
+    = TxOutInRecentEra (Core.TxOut (ShelleyLedgerEra BabbageEra))
+        -- NOTE: Assuming @TxOut BabbageEra@ contains the same
+        -- information as @TxOut AlonzoEra@ or more.
+
+data ErrInvalidTxOutInEra
+    = ErrInlineDatumNotSupportedInAlonzo
+    | ErrInlineScriptNotSupportedInAlonzo
+
+-- | Takes a
+wrapTxOutInRecentEra
+    :: Core.TxOut (ShelleyLedgerEra BabbageEra)
+    -> TxOutInRecentEra
+wrapTxOutInRecentEra = TxOutInRecentEra
+
+unwrapTxOutInRecentEra
+    :: RecentEra era
+    -> TxOutInRecentEra
+    -> Either ErrInvalidTxOutInEra (Core.TxOut (ShelleyLedgerEra era))
+unwrapTxOutInRecentEra era (TxOutInRecentEra babbageTxOut) = case era of
+    RecentEraBabbage -> pure babbageTxOut
+    RecentEraAlonzo -> downcastTxOut babbageTxOut
+  where
+    downcastTxOut
+        :: Core.TxOut (ShelleyLedgerEra BabbageEra)
+        -> Either
+            ErrInvalidTxOutInEra
+            (Core.TxOut (ShelleyLedgerEra AlonzoEra))
+    downcastTxOut (Babbage.TxOut _addr _val _datum (SJust _script))
+        = Left ErrInlineScriptNotSupportedInAlonzo
+    downcastTxOut (Babbage.TxOut _addr _val (Alonzo.Datum _) _script)
+        = Left ErrInlineDatumNotSupportedInAlonzo
+    downcastTxOut (Babbage.TxOut addr val Alonzo.NoDatum SNothing)
+        = Right $ Alonzo.TxOut addr val SNothing
+    downcastTxOut (Babbage.TxOut addr val (Alonzo.DatumHash dh) SNothing)
+        = Right $ Alonzo.TxOut addr val (SJust dh)
+
+utxoFromTxOutsInRecentEra
+    :: forall era. RecentEra era
+    -> [(TxIn, TxOutInRecentEra)]
+    -> Either ErrInvalidTxOutInEra (Shelley.UTxO (ShelleyLedgerEra era))
+utxoFromTxOutsInRecentEra era =
+    fmap (Shelley.UTxO . Map.fromList) . mapM (downcast)
+  where
+    downcast
+        :: (TxIn, TxOutInRecentEra)
+        -> Either
+            ErrInvalidTxOutInEra
+            (Ledger.TxIn (Crypto (ShelleyLedgerEra era)), (Core.TxOut (ShelleyLedgerEra era)))
+    downcast (i, o) = do
+        o' <- unwrapTxOutInRecentEra era o
+        pure (castInput i, o')
+
+    -- Proves @Crypto (ShelleyLedgerEra era) ~ StandardCrypto@ without
+    -- requiring an additional constraint.
+    castInput i = case era of
+        RecentEraBabbage -> i
+        RecentEraAlonzo -> i
+
+
+--------------------------------------------------------------------------------
+-- Compatibility
+--------------------------------------------------------------------------------
+
+toCardanoUTxO
+    :: forall era. IsRecentEra era
+    => Shelley.UTxO (ShelleyLedgerEra era)
+    -> Cardano.UTxO era
+toCardanoUTxO = withConstraints $
+    Cardano.UTxO
+    . Map.mapKeys Cardano.fromShelleyTxIn
+    . Map.map (Cardano.fromShelleyTxOut (shelleyBasedEra @era))
+    . unUTxO
+  where
+    unUTxO (Shelley.UTxO m) = m
+
+    withConstraints
+        :: ((Crypto (Cardano.ShelleyLedgerEra era) ~ StandardCrypto) => a)
+        -> a
+    withConstraints a = case recentEra @era of
+        RecentEraBabbage -> a
+        RecentEraAlonzo -> a
+
+fromCardanoUTxO
+    :: forall era. IsRecentEra era
+    => Cardano.UTxO era
+    -> Shelley.UTxO (Cardano.ShelleyLedgerEra era)
+fromCardanoUTxO = withConstraints $
+    Shelley.UTxO
+    . Map.mapKeys Cardano.toShelleyTxIn
+    . Map.map (Cardano.toShelleyTxOut (shelleyBasedEra @era))
+    . unCardanoUTxO
+  where
+    unCardanoUTxO (Cardano.UTxO m) = m
+
+    withConstraints
+        :: ((Crypto (Cardano.ShelleyLedgerEra era) ~ StandardCrypto) => a)
+        -> a
+    withConstraints a = case recentEra @era of
+        RecentEraBabbage -> a
+        RecentEraAlonzo -> a

@@ -44,6 +44,8 @@ import Cardano.Address.Script
     )
 import Cardano.Api
     ( StakeAddress, deserialiseFromRawBytes, proxyToAsType )
+import Cardano.Api.Gen
+    ( genScriptData, genScriptInAnyLang )
 import Cardano.Mnemonic
     ( CheckSumBits
     , ConsistentEntropy
@@ -479,6 +481,7 @@ import Text.Regex.PCRE
 import Web.HttpApiData
     ( FromHttpApiData (..) )
 
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Data.Aeson as Aeson
@@ -2248,6 +2251,14 @@ instance Arbitrary (ApiExternalInput n) where
         <*> arbitrary
         <*> arbitrary
         <*> arbitrary
+        <*> arbitrary
+        <*> arbitrary
+
+instance Arbitrary (Cardano.ScriptData) where
+    arbitrary = genScriptData
+
+instance Arbitrary (Cardano.ScriptInAnyLang) where
+    arbitrary = genScriptInAnyLang
 
 instance Arbitrary (ApiBalanceTransactionPostData n) where
     arbitrary = ApiBalanceTransactionPostData

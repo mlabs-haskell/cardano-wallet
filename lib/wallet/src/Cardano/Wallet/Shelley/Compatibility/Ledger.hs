@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase #-}
@@ -63,7 +64,7 @@ import Cardano.Wallet.Primitive.Types.TokenPolicy
 import Cardano.Wallet.Primitive.Types.TokenQuantity
     ( TokenQuantity (..) )
 import Cardano.Wallet.Primitive.Types.Tx
-    ( TxOut (..) )
+    ( TxIn (..), TxOut (..) )
 import Data.ByteString.Short
     ( fromShort, toShort )
 import Data.Foldable
@@ -100,6 +101,7 @@ import qualified Cardano.Ledger.Babbage.TxBody as Babbage
 import qualified Cardano.Ledger.Crypto as Ledger
 import qualified Cardano.Ledger.Keys as Ledger
 import qualified Cardano.Ledger.Mary.Value as Ledger
+import qualified Cardano.Ledger.SafeHash as SafeHash
 import qualified Cardano.Ledger.Shelley.API as Ledger
 import qualified Cardano.Ledger.Shelley.TxBody as Shelley
 import qualified Cardano.Ledger.ShelleyMA.Timelocks as MA
@@ -246,6 +248,23 @@ toWalletTokenQuantity q
             , "Unexpected negative value:"
             , pretty q
             ]
+
+--------------------------------------------------------------------------------
+-- Conversions for 'TxIn'
+--------------------------------------------------------------------------------
+
+instance Convert TxIn (Ledger.TxIn StandardCrypto) where
+    toLedger (TxIn tid ix) =
+        Ledger.TxIn (toLedgerHash tid) (toEnum $ intCast ix)
+      where
+        toLedgerHash (Hash h) =
+            Ledger.TxId
+                $ SafeHash.unsafeMakeSafeHash
+                $ Crypto.UnsafeHash
+                $ toShort h
+
+    toWallet = error "todo"--Address . Ledger.serialiseAddr
+
 
 --------------------------------------------------------------------------------
 -- Conversions for 'Address'

@@ -4167,6 +4167,8 @@ pingPong_2 = PartialTx
                 (TokenBundle.fromCoin $ Coin 2_000_000)
           , Just $ Hash $ unsafeFromHex
             "923918e403bf43c34b4ef6b48eb2ee04babed17320d8d1b9ff9ad086e86f44ec"
+          , Nothing
+          , Nothing
           )
         ]
     , redeemers =

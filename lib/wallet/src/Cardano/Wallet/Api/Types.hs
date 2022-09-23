@@ -16,6 +16,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -416,7 +417,7 @@ import Data.Aeson.Types
     , Parser
     , SumEncoding (..)
     , ToJSON (..)
-    , Value (Object, String)
+    , Value (Null, Object, String)
     , camelTo2
     , constructorTagModifier
     , fieldLabelModifier
@@ -513,6 +514,7 @@ import qualified Cardano.Wallet.Primitive.Types.TokenBundle as W
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as W
 import qualified Cardano.Wallet.Primitive.Types.TokenPolicy as W
+import qualified Cardano.Wallet.Write.Tx as WriteTx
 import qualified Codec.Binary.Bech32 as Bech32
 import qualified Codec.Binary.Bech32.TH as Bech32
 import qualified Data.Aeson as Aeson
@@ -1099,9 +1101,24 @@ data ApiExternalInput (n :: NetworkDiscriminant) = ApiExternalInput
     , address :: !(ApiT Address, Proxy n)
     , amount :: !(Quantity "lovelace" Natural)
     , assets :: !(ApiT W.TokenMap)
-    , datum :: !(Maybe (ApiT (Hash "Datum")))
+    , datum :: !(Maybe (ApiT WriteTx.DatumHash))
     } deriving (Eq, Generic, Show, Typeable)
-      deriving anyclass NFData
+
+instance FromJSON (ApiT WriteTx.DatumHash) where
+    parseJSON = withText "DatumHash" $ \hex -> maybeToParser $ do
+            bytes <- parseHex hex
+            ApiT <$> WriteTx.datumHashFromBytes bytes
+      where
+        maybeToParser = maybe failWithHelp pure
+        failWithHelp = fail $ mconcat
+            [ "expected <hex of valid datum hash>"
+            ]
+
+        parseHex :: Text -> Maybe ByteString
+        parseHex = eitherToMaybe . fromHexText
+
+instance ToJSON (ApiT WriteTx.DatumHash) where
+    toJSON (ApiT dh) = String $ hexText $ WriteTx.datumHashToBytes dh
 
 data ApiBalanceTransactionPostData (n :: NetworkDiscriminant) = ApiBalanceTransactionPostData
     { transaction :: !(ApiT SealedTx)
