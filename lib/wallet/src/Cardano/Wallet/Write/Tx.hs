@@ -28,6 +28,10 @@ module Cardano.Wallet.Write.Tx
     , unwrapTxOutInRecentEra
     , ErrInvalidTxOutInEra (..)
 
+    -- ** Address
+    , Address
+    , unsafeAddressFromBytes
+
     -- ** Value
     , Value
 
@@ -49,12 +53,14 @@ module Cardano.Wallet.Write.Tx
 
     -- * TxIn
     , TxIn
+    , unsafeMkTxIn
 
     -- * UTxO
     , Shelley.UTxO
     , utxoFromTxOutsInRecentEra
     , toCardanoUTxO
     , fromCardanoUTxO
+    , utxoFromTxOuts
 
     )
     where
@@ -90,7 +96,10 @@ import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Extra as Cardano
 import qualified Cardano.Api.Shelley as Cardano
 import qualified Cardano.Binary as CBOR
+import Cardano.Crypto.Hash
+    ( Hash (UnsafeHash) )
 import qualified Cardano.Crypto.Hash.Class as Crypto
+import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Alonzo.Data as Alonzo
 import qualified Cardano.Ledger.Alonzo.Scripts as Alonzo
 import qualified Cardano.Ledger.Alonzo.TxBody as Alonzo
@@ -179,14 +188,32 @@ asAnyRecentEra = \case
 
 type TxIn = Ledger.TxIn StandardCrypto
 
+-- | Useful for testing
+unsafeMkTxIn :: ByteString -> Word -> TxIn
+unsafeMkTxIn hash ix = Ledger.mkTxInPartial
+    (toTxId hash)
+    (fromIntegral ix)
+  where
+    toTxId :: ByteString -> Ledger.TxId StandardCrypto
+    toTxId h =
+        (Ledger.TxId (unsafeMakeSafeHash $ UnsafeHash $ toShort h))
+
 --------------------------------------------------------------------------------
 -- TxOut
 --------------------------------------------------------------------------------
 
 -- type TxOut era = Core.TxOut era FIXME
 
+type Address = Ledger.Addr StandardCrypto
+
+unsafeAddressFromBytes :: ByteString -> Address
+unsafeAddressFromBytes bytes = case Ledger.deserialiseAddr bytes of
+    Just addr -> addr
+    Nothing -> error "unsafeAddressFromBytes: failed to deserialise"
+
 type Script = Alonzo.Script (Babbage.BabbageEra StandardCrypto)
 -- NOTE: Era only used for its 'Crypto era'
+
 
 scriptFromBytes :: ByteString -> Either CBOR.DecoderError Script
 scriptFromBytes bs = CBOR.decodeAnnotator "Script" CBOR.fromCBOR (fromStrict bs)
@@ -228,6 +255,7 @@ datumHashToBytes = Crypto.hashToBytes . extractHash
 
 datumToBytes :: Alonzo.BinaryData StandardBabbage -> ByteString
 datumToBytes = CBOR.serialize'
+
 
 -- | Union type essentially representing the union
 -- @Data.These latestEraTxOut prevEraTxOut@.
@@ -292,6 +320,14 @@ unwrapTxOutInRecentEra era (TxOutInRecentEra babbageTxOut) = case era of
     downcastTxOut (Babbage.TxOut addr val (Alonzo.DatumHash dh) SNothing)
         = Right $ Alonzo.TxOut addr val (SJust dh)
 
+utxoFromTxOuts
+    :: forall era. IsRecentEra era
+    => RecentEra era
+    -> [(TxIn, Core.TxOut (ShelleyLedgerEra era))]
+    -> (Shelley.UTxO (ShelleyLedgerEra era))
+utxoFromTxOuts era = withStandardCryptoConstraint era $
+    Shelley.UTxO . Map.fromList
+
 utxoFromTxOutsInRecentEra
     :: forall era. RecentEra era
     -> [(TxIn, TxOutInRecentEra)]
@@ -342,7 +378,7 @@ fromCardanoUTxO
     :: forall era. IsRecentEra era
     => Cardano.UTxO era
     -> Shelley.UTxO (Cardano.ShelleyLedgerEra era)
-fromCardanoUTxO = withConstraints $
+fromCardanoUTxO = withStandardCryptoConstraint (recentEra @era) $
     Shelley.UTxO
     . Map.mapKeys Cardano.toShelleyTxIn
     . Map.map (Cardano.toShelleyTxOut (shelleyBasedEra @era))
@@ -350,9 +386,15 @@ fromCardanoUTxO = withConstraints $
   where
     unCardanoUTxO (Cardano.UTxO m) = m
 
-    withConstraints
-        :: ((Crypto (Cardano.ShelleyLedgerEra era) ~ StandardCrypto) => a)
-        -> a
-    withConstraints a = case recentEra @era of
-        RecentEraBabbage -> a
-        RecentEraAlonzo -> a
+--------------------------------------------------------------------------------
+-- Module-internal helpers
+--------------------------------------------------------------------------------
+
+withStandardCryptoConstraint
+    :: IsRecentEra era
+    => RecentEra era
+    -> ((Crypto (Cardano.ShelleyLedgerEra era) ~ StandardCrypto) => a)
+    -> a
+withStandardCryptoConstraint era a = case era of
+    RecentEraBabbage -> a
+    RecentEraAlonzo -> a

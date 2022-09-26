@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -364,18 +365,17 @@ server = error
     \the way they interact with the outside world. Only valid requests are \
     \delegated to our handlers."
 
--- Dummy instances
-instance EncodeAddress ('Testnet 0) where
+instance {-# OVERLAPS #-} EncodeAddress ('Testnet 0) where
     encodeAddress = T.pack . show
 
-instance DecodeAddress ('Testnet 0) where
+instance {-# OVERLAPS #-} DecodeAddress ('Testnet 0) where
     decodeAddress _ = pure (Address "<addr>")
 
 -- Dummy instances
-instance EncodeStakeAddress ('Testnet 0) where
+instance {-# OVERLAPS #-} EncodeStakeAddress ('Testnet 0) where
     encodeStakeAddress = T.pack . show
 
-instance DecodeStakeAddress ('Testnet 0) where
+instance {-# OVERLAPS #-} DecodeStakeAddress ('Testnet 0) where
     decodeStakeAddress _ = pure (RewardAccount "<acct>")
 
 everyPathParam :: GEveryEndpoints api => Proxy api -> MkPathRequest api

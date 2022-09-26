@@ -132,8 +132,6 @@ import Cardano.Wallet.Primitive.Types.Address
     ( Address (..) )
 import Cardano.Wallet.Primitive.Types.Coin
     ( Coin (..) )
-import Cardano.Wallet.Primitive.Types.Hash
-    ( Hash (..) )
 import Cardano.Wallet.Primitive.Types.Redeemer
     ( Redeemer, redeemerData )
 import Cardano.Wallet.Primitive.Types.TokenBundle
@@ -159,8 +157,6 @@ import Cardano.Wallet.Primitive.Types.Tx
     )
 import Cardano.Wallet.Primitive.Types.Tx.Constraints
     ( TxConstraints (..), TxSize (..), txSizeDistance )
-import Cardano.Wallet.Primitive.Types.UTxO
-    ( UTxO (..) )
 import Cardano.Wallet.Read.Primitive.Tx
     ( fromCardanoTx )
 import Cardano.Wallet.Shelley.Compatibility
@@ -238,7 +234,7 @@ import Data.Kind
 import Data.Map.Strict
     ( Map, (!) )
 import Data.Maybe
-    ( fromMaybe, mapMaybe )
+    ( mapMaybe )
 import Data.Quantity
     ( Quantity (..) )
 import Data.Set
@@ -1319,8 +1315,7 @@ _assignScriptRedeemers pparams ti utxo redeemers tx =
     -- | Finally, calculate and add the script integrity hash with the new
     -- final redeemers, if any.
     addScriptIntegrityHashAlonzo
-        :: forall e. (e ~ Cardano.ShelleyLedgerEra Cardano.AlonzoEra)
-        => AlonzoTx
+        :: AlonzoTx
         -> AlonzoTx
     addScriptIntegrityHashAlonzo alonzoTx =
         let

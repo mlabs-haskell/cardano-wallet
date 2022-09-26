@@ -37,18 +37,14 @@ import Cardano.Api.Extra
 import Cardano.Crypto.DSIGN.Class
     ( rawDeserialiseVerKeyDSIGN )
 import Cardano.Crypto.Hash.Class
-    ( Hash (UnsafeHash), hashToBytes )
+    ( Hash (UnsafeHash) )
 import Cardano.Mnemonic
     ( SomeMnemonic (..) )
-import Cardano.Wallet
-    ( PartialTx (..) )
 import Cardano.Wallet.Api.Types
     ( AddressAmount (..)
     , ApiAddress (..)
     , ApiAnyCertificate (..)
     , ApiAssetMintBurn (..)
-    , ApiBalanceTransactionPostData (..)
-    , ApiBalanceTransactionPostData
     , ApiCertificate (..)
     , ApiCoinSelection (withdrawals)
     , ApiConstructTransaction (..)
@@ -56,7 +52,6 @@ import Cardano.Wallet.Api.Types
     , ApiDeregisterPool (..)
     , ApiEra (..)
     , ApiExternalCertificate (..)
-    , ApiExternalInput (..)
     , ApiNetworkInformation
     , ApiPolicyId
     , ApiPolicyKey (..)
@@ -85,7 +80,6 @@ import Cardano.Wallet.Api.Types
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DerivationIndex (..)
     , HardDerivation (..)
-    , NetworkDiscriminant (Mainnet)
     , PaymentAddress (..)
     , Role (..)
     , WalletKey (..)
@@ -110,7 +104,7 @@ import Cardano.Wallet.Primitive.Types.Hash
 import Cardano.Wallet.Primitive.Types.RewardAccount
     ( RewardAccount (..) )
 import Cardano.Wallet.Primitive.Types.TokenBundle
-    ( AssetId (..), TokenBundle (..) )
+    ( AssetId (..) )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenName (..), TokenPolicyId (..), mkTokenFingerprint, mkTokenName )
 import Cardano.Wallet.Primitive.Types.TokenQuantity
@@ -126,11 +120,10 @@ import Cardano.Wallet.Primitive.Types.Tx
     , TxStatus (..)
     , cardanoTxIdeallyNoLaterThan
     , getSealedTxBody
-    , sealedTxFromCardano
     , sealedTxFromCardanoBody
     )
 import Cardano.Wallet.Shelley.Compatibility
-    ( fromCardanoTxOut, fromCardanoValue )
+    ( fromCardanoTxOut )
 import Cardano.Wallet.Transaction
     ( AnyScript (..), ValidityIntervalExplicit (..) )
 import Cardano.Wallet.Unsafe
@@ -148,11 +141,13 @@ import Data.Aeson
 import Data.ByteArray.Encoding
     ( Base (..), convertToBase )
 import Data.ByteString.Short
-    ( fromShort, toShort )
+    ( toShort )
 import Data.Function
     ( (&) )
 import Data.Generics.Internal.VL.Lens
     ( view, (^.) )
+import Data.List
+    ( elemIndex )
 import Data.Maybe
     ( fromJust, fromMaybe, isJust )
 import Data.Proxy
@@ -167,12 +162,10 @@ import Data.Text.Class
     ( toText )
 import Numeric.Natural
     ( Natural )
-import System.FilePath
-    ( (</>) )
 import Test.Hspec
     ( SpecWith, describe, pendingWith, shouldContain, shouldNotContain )
 import Test.Hspec.Expectations.Lifted
-    ( HasCallStack, shouldBe, shouldNotBe, shouldNotSatisfy, shouldSatisfy )
+    ( shouldBe, shouldNotBe, shouldNotSatisfy, shouldSatisfy )
 import Test.Hspec.Extra
     ( it )
 import Test.Integration.Framework.DSL
@@ -237,32 +230,20 @@ import Test.Integration.Framework.TestData
     , errMsg404NoSuchPool
     , errMsg404NoWallet
     )
-import Test.Utils.Paths
-    ( getTestData )
 import UnliftIO.Exception
     ( fromEither )
 
 import qualified Cardano.Api as Cardano
-import qualified Cardano.Api as Cardano
-import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Shelley as Cardano
-import qualified Cardano.Ledger.Address as SL
 import qualified Cardano.Ledger.Alonzo.Tx as Alonzo
 import qualified Cardano.Ledger.Crypto as Ledger
 import qualified Cardano.Ledger.Keys as Ledger
 import qualified Cardano.Wallet.Api.Link as Link
 import qualified Cardano.Wallet.Primitive.AddressDerivation.Shelley as Shelley
-import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Primitive.Types.Hash as W
-import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TokenBundle
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
-import qualified Cardano.Wallet.Primitive.Types.TokenPolicy as W
-import qualified Cardano.Wallet.Primitive.Types.TokenQuantity as W
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Char8 as B8
-import qualified Data.ByteString.Lazy as BL
-import Data.List
-    ( elemIndex )
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set

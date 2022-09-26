@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -484,6 +485,7 @@ import Web.HttpApiData
 import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
+import qualified Cardano.Wallet.Write.Tx as WriteTx
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Aeson
 import qualified Data.Aeson.KeyMap as Aeson
@@ -1433,18 +1435,18 @@ instance FromJSON SchemaApiErrorCode where
 -------------------------------------------------------------------------------}
 
 -- Dummy instances
-instance EncodeAddress ('Testnet 0) where
+instance {-# INCOHERENT #-} EncodeAddress ('Testnet 0) where
     encodeAddress = const "<addr>"
 
-instance DecodeAddress ('Testnet 0) where
+instance {-# INCOHERENT #-} DecodeAddress ('Testnet 0) where
     decodeAddress "<addr>" = Right $ Address "<addr>"
     decodeAddress _ = Left $ TextDecodingError "invalid address"
 
 -- Dummy instances
-instance EncodeStakeAddress ('Testnet 0) where
+instance {-# INCOHERENT #-} EncodeStakeAddress ('Testnet 0) where
     encodeStakeAddress = const "<stake-addr>"
 
-instance DecodeStakeAddress ('Testnet 0) where
+instance {-# INCOHERENT #-} DecodeStakeAddress ('Testnet 0) where
     decodeStakeAddress "<stake-addr>" = Right $ RewardAccount "<stake-addr>"
     decodeStakeAddress _ = Left $ TextDecodingError "invalid stake address"
 
@@ -2252,13 +2254,14 @@ instance Arbitrary (ApiExternalInput n) where
         <*> arbitrary
         <*> arbitrary
         <*> arbitrary
-        <*> arbitrary
 
-instance Arbitrary (Cardano.ScriptData) where
-    arbitrary = genScriptData
+instance Arbitrary WriteTx.Script where
+    arbitrary =
+        WriteTx.scriptFromCardanoScriptInAnyLang
+        <$> genScriptInAnyLang
 
-instance Arbitrary (Cardano.ScriptInAnyLang) where
-    arbitrary = genScriptInAnyLang
+instance Arbitrary WriteTx.Datum where
+    arbitrary = pure WriteTx.NoDatum -- FIXME!!! Gen hash & datum too
 
 instance Arbitrary (ApiBalanceTransactionPostData n) where
     arbitrary = ApiBalanceTransactionPostData
