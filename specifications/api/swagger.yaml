@@ -1037,13 +1037,19 @@ x-transactionId: &transactionId
   minLength: 64
   example: 1423856bc91c49e928f6f30f4e8d665d53eb4ab6028bd0ac971809d514c92db1
 
-x-datum: &datum
+x-datumHash: &datumHash
   description: A datum hash.
   type: string
   format: hex
   maxLength: 64
   minLength: 64
   example: 16f30f4e8d665d53eb4ab6028bd0ac971809d514c92d423856bc91c49e928faf
+
+x-datum: &datum
+  description: A datum (CBOR and hex-encoded).
+  type: string
+  format: hex
+  example: 182a
 
 x-transactionInsertedAt: &transactionInsertedAt
   description: |
@@ -3831,7 +3837,22 @@ components:
                   minimum: 0
                 address: *addressId
                 amount: *amount
-                datum: *datum
+                datum:
+                    oneOf:
+                      - type: object
+                        title: Inline datum
+                        required:
+                          - inline
+                        properties:
+                          inline: *datum
+                      - type: object
+                        title: Datum hash
+                        required:
+                          - hash
+                        properties:
+                          hash: *datumHash
+                      - type: null
+                        title: None
                 assets: *walletAssets
         redeemers:
             description: A list of redeemers data with their purpose.
