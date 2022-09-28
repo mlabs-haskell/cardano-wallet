@@ -267,3 +267,8 @@ instance FromJSON (ApiT TxMetadata) where
 
 instance ToJSON (ApiT TxMetadata) where
     toJSON = metadataToJson TxMetadataJsonDetailedSchema . getApiT
+
+instance FromJSON (ApiT (Hash "ScriptIntegrity")) where
+    parseJSON = fromTextApiT "ScriptIntegrity"
+instance ToJSON (ApiT (Hash "ScriptIntegrity")) where
+    toJSON = toTextApiT

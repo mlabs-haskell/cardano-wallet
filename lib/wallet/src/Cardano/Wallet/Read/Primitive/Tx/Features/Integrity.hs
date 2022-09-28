@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- |
@@ -9,11 +8,16 @@
 --
 
 module Cardano.Wallet.Read.Primitive.Tx.Features.Integrity
-    ( integrity )
+    ( integrity
+    , txIntegrityF
+    , txIntegrity
+    , txIntegrityCardanoApi
+    )
 
  where
 
-import Prelude
+import Prelude hiding
+    ( (.) )
 
 import Cardano.Ledger.Alonzo.Tx
     ( ScriptIntegrityHash )
@@ -22,12 +26,19 @@ import Cardano.Ledger.Crypto
 import Cardano.Ledger.SafeHash
     ( SafeToHash (originalBytes) )
 import Cardano.Wallet.Read.Eras
-    ( EraFun (..), K (..) )
+    ( EraFun (..), EraValue, K (..), applyEraFun, extractEraValue )
+import Cardano.Wallet.Read.Tx
+    ( Tx )
+import Cardano.Wallet.Read.Tx.Cardano
+    ( fromCardanoApiTx )
 import Cardano.Wallet.Read.Tx.Integrity
-    ( Integrity (..) )
+    ( Integrity (..), getEraIntegrity )
+import Control.Category
+    ( (.) )
 import Data.Maybe.Strict
     ( StrictMaybe, strictMaybeToMaybe )
 
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet.Primitive.Types.Hash as W
 
 integrity :: EraFun Integrity (K (Maybe (W.Hash "ScriptIntegrity")))
@@ -48,4 +59,13 @@ getIntegrity
     -> Maybe (W.Hash "ScriptIntegrity")
 getIntegrity = strictMaybeToMaybe . fmap (W.Hash . originalBytes)
 
+-- useful to cache this composition here
+txIntegrityF :: EraFun Tx (K (Maybe (W.Hash "ScriptIntegrity")))
+txIntegrityF = integrity . getEraIntegrity
 
+-- this is a helper that reuses the cache
+txIntegrity :: EraValue Tx -> Maybe (W.Hash "ScriptIntegrity")
+txIntegrity = extractEraValue . applyEraFun txIntegrityF
+
+txIntegrityCardanoApi :: Cardano.Tx era -> Maybe (W.Hash "ScriptIntegrity")
+txIntegrityCardanoApi = txIntegrity . fromCardanoApiTx
