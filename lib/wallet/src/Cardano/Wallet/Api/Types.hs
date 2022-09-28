@@ -1117,7 +1117,7 @@ instance FromJSON (ApiT WriteTx.Datum) where
             -> pure WriteTx.NoDatum
         Object (AsList [("inline", String hex)]) -> do
             bytes <- parseHex hex
-            eitherToParser (WriteTx.datumFromBytes bytes)
+            WriteTx.Datum <$> eitherToParser (WriteTx.datumFromBytes bytes)
         Object (AsList [("hash", String hex)]) -> do
             bytes <- parseHex hex
             maybeToParser $ WriteTx.datumHashFromBytes bytes

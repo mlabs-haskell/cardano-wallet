@@ -298,9 +298,9 @@ type Datum = Alonzo.Datum (Babbage.BabbageEra StandardCrypto)
 -- - 'Alonzo.Datum' - adds tags to differentiate between e.g. inline datums and
 -- datum hashes. We could add helpers for this roundtrip, but they would be
 -- separate from the existing 'datum{From,To}Bytes' pair.
-datumFromBytes :: ByteString -> Either String Datum
+datumFromBytes :: ByteString -> Either String (Alonzo.BinaryData StandardBabbage)
 datumFromBytes =
-    fmap Alonzo.Datum . Alonzo.makeBinaryData . toShort
+    Alonzo.makeBinaryData . toShort
 
 datumToBytes :: Alonzo.BinaryData StandardBabbage -> ByteString
 datumToBytes = CBOR.serialize' . Alonzo.getPlutusData . Alonzo.binaryDataToData
