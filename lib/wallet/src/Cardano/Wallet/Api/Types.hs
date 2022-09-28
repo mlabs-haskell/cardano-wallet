@@ -507,6 +507,8 @@ import Servant.API
 import Web.HttpApiData
     ( FromHttpApiData (..), ToHttpApiData (..) )
 
+import qualified Cardano.Api as Cardano
+import qualified Cardano.Api.Shelley as Cardano
 import qualified Cardano.Crypto.Wallet as CC
 import qualified Cardano.Wallet.Primitive.AddressDerivation as AD
 import qualified Cardano.Wallet.Primitive.Types as W
@@ -515,6 +517,7 @@ import qualified Cardano.Wallet.Primitive.Types.TokenBundle as W
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as W
 import qualified Cardano.Wallet.Primitive.Types.TokenPolicy as W
+import qualified Cardano.Wallet.Write.Tx as WriteTx
 import qualified Cardano.Wallet.Write.Tx as WriteTx
 import qualified Codec.Binary.Bech32 as Bech32
 import qualified Codec.Binary.Bech32.TH as Bech32
@@ -1113,16 +1116,20 @@ instance FromJSON (ApiT WriteTx.Datum) where
     parseJSON v = ApiT <$> case v of
         Null
             -> pure WriteTx.NoDatum
-        Object (AsList [("inline", String hex)]) -> maybeToParser $ do
+        Object (AsList [("inline", String hex)]) -> do
             bytes <- parseHex hex
-            eitherToMaybe (WriteTx.datumFromBytes bytes)
-        Object (AsList [("hash", String hex)]) -> maybeToParser $ do
+            eitherToParser (WriteTx.datumFromBytes bytes)
+        Object (AsList [("hash", String hex)]) -> do
             bytes <- parseHex hex
-            WriteTx.datumHashFromBytes bytes
+            maybeToParser $ WriteTx.datumHashFromBytes bytes
         _ -> failWithHelp
 
       where
         maybeToParser = maybe failWithHelp pure
+
+        eitherToParser (Left e) = fail $ show e
+        eitherToParser (Right a) = pure a
+
         failWithHelp = fail $ mconcat
             [ "expected either "
             , "{\"inline\": \"<hex of valid datum cbor>\"}"
@@ -1131,8 +1138,8 @@ instance FromJSON (ApiT WriteTx.Datum) where
             , " or null"
             ]
 
-        parseHex :: Text -> Maybe ByteString
-        parseHex = eitherToMaybe . fromHexText
+        parseHex :: Text -> Parser ByteString
+        parseHex = eitherToParser . fromHexText
 
 instance ToJSON (ApiT WriteTx.Datum) where
     toJSON (ApiT (WriteTx.Datum datum)) =
@@ -1147,12 +1154,11 @@ instance ToJSON (ApiT WriteTx.Datum) where
 
 instance FromJSON (ApiT WriteTx.Script) where
     parseJSON =
-        fmap (ApiT . WriteTx.scriptFromCardanoScriptInAnyLang)
-        . parseJSON
+        fmap (ApiT)
+        . WriteTx.scriptFromCardanoEnvelopeJSON
 
 instance ToJSON (ApiT WriteTx.Script) where
-    toJSON (ApiT s) =
-        toJSON $ WriteTx.scriptToCardanoScriptInAnyLang s
+    toJSON (ApiT s) = WriteTx.scriptToCardanoEnvelopeJSON s
 
 data ApiBalanceTransactionPostData (n :: NetworkDiscriminant) = ApiBalanceTransactionPostData
     { transaction :: !(ApiT SealedTx)

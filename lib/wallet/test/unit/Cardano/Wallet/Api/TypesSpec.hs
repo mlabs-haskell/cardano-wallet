@@ -431,6 +431,8 @@ import System.Environment
     ( lookupEnv )
 import System.FilePath
     ( (</>) )
+import Test.Cardano.Ledger.Alonzo.Serialisation.Generators
+    ()
 import Test.Hspec
     ( Spec, SpecWith, describe, it, shouldBe )
 import Test.Hspec.Extra
@@ -482,7 +484,6 @@ import Text.Regex.PCRE
 import Web.HttpApiData
     ( FromHttpApiData (..) )
 
-import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Primitive.Types.Coin as Coin
 import qualified Cardano.Wallet.Write.Tx as WriteTx
@@ -2063,9 +2064,9 @@ instance Arbitrary (Quantity "slot" Word32) where
     shrink _ = [Quantity 0]
     arbitrary = Quantity . fromIntegral <$> (arbitrary @Word32)
 
-instance Arbitrary SlotNo where
-    shrink = fmap SlotNo . shrink . unSlotNo
-    arbitrary = SlotNo <$> arbitrary
+-- instance Arbitrary SlotNo where
+--     shrink = fmap SlotNo . shrink . unSlotNo
+--     arbitrary = SlotNo <$> arbitrary
 
 instance Arbitrary (Hash "Genesis") where
     arbitrary = Hash . B8.pack <$> replicateM 32 arbitrary
@@ -2255,13 +2256,17 @@ instance Arbitrary (ApiExternalInput n) where
         <*> arbitrary
         <*> arbitrary
 
+instance Arbitrary WriteTx.Datum where
+    arbitrary = oneof
+        [ WriteTx.Datum <$> arbitrary
+        , pure WriteTx.NoDatum
+        , WriteTx.DatumHash <$> arbitrary
+        ]
+
 instance Arbitrary WriteTx.Script where
     arbitrary =
         WriteTx.scriptFromCardanoScriptInAnyLang
         <$> genScriptInAnyLang
-
-instance Arbitrary WriteTx.Datum where
-    arbitrary = pure WriteTx.NoDatum -- FIXME!!! Gen hash & datum too
 
 instance Arbitrary (ApiBalanceTransactionPostData n) where
     arbitrary = ApiBalanceTransactionPostData
@@ -2819,9 +2824,9 @@ instance Arbitrary ApiAccountKeyShared where
         oneof [ pure $ ApiAccountKeyShared pubKey NonExtended purposeCIP1854
               , pure $ ApiAccountKeyShared xpubKey Extended purposeCIP1854 ]
 
-instance Arbitrary Natural where
-    shrink = shrinkIntegral
-    arbitrary = genNatural
+--instance Arbitrary Natural where
+--    shrink = shrinkIntegral
+--    arbitrary = genNatural
 
 instance Arbitrary (Proxy n) => Arbitrary (ApiStakeKeys n) where
     arbitrary = Test.QuickCheck.scale (`div` 4) genericArbitrary

@@ -49,12 +49,9 @@
             "id": "1f40624676657e667f79681430442989da0d512a0114046955252168357b7273",
             "index": 23068,
             "script": {
-                "script": {
-                    "cborHex": "4338329a",
-                    "description": "",
-                    "type": "PlutusScriptV2"
-                },
-                "scriptLanguage": "PlutusScriptLanguage PlutusScriptV2"
+                "cborHex": "4338329a",
+                "description": "",
+                "type": "PlutusScriptV2"
             }
         },
         {
@@ -79,12 +76,9 @@
             "id": "101c48635ee24c177b25166bd42c4ff52b6f567f540e31d301f72162757b7006",
             "index": 5017,
             "script": {
-                "script": {
-                    "cborHex": "820280",
-                    "description": "",
-                    "type": "SimpleScriptV2"
-                },
-                "scriptLanguage": "SimpleScriptLanguage SimpleScriptV2"
+                "cborHex": "820280",
+                "description": "",
+                "type": "SimpleScriptV2"
             }
         },
         {
@@ -98,12 +92,9 @@
             "id": "6058452f5e6805750370305c557633385a1d6370244ce765630d502a7b123160",
             "index": 7934,
             "script": {
-                "script": {
-                    "cborHex": "53e203b8bb1231edacfeb3a52d4b88c68106c16d",
-                    "description": "",
-                    "type": "PlutusScriptV1"
-                },
-                "scriptLanguage": "PlutusScriptLanguage PlutusScriptV1"
+                "cborHex": "53e203b8bb1231edacfeb3a52d4b88c68106c16d",
+                "description": "",
+                "type": "PlutusScriptV1"
             }
         },
         {
@@ -117,12 +108,9 @@
             "id": "007e0a600f4dd00b06756a18227f754270474ba64d596f34de3c074d2e6a59d9",
             "index": 32120,
             "script": {
-                "script": {
-                    "cborHex": "82051a006d05f6",
-                    "description": "",
-                    "type": "SimpleScriptV2"
-                },
-                "scriptLanguage": "SimpleScriptLanguage SimpleScriptV2"
+                "cborHex": "82051a006d05f6",
+                "description": "",
+                "type": "SimpleScriptV2"
             }
         },
         {
@@ -136,12 +124,9 @@
             "id": "7c7f3330506f797f3ac65d1e5eaa6b957860643f6a76e1933c5e66f838661b7d",
             "index": 21879,
             "script": {
-                "script": {
-                    "cborHex": "8200581c2dd20df8609f092db937fc25d0aba93e8573a591743c90017f1fda1c",
-                    "description": "",
-                    "type": "SimpleScriptV2"
-                },
-                "scriptLanguage": "SimpleScriptLanguage SimpleScriptV2"
+                "cborHex": "8200581c2dd20df8609f092db937fc25d0aba93e8573a591743c90017f1fda1c",
+                "description": "",
+                "type": "SimpleScriptV2"
             }
         },
         {
@@ -161,12 +146,9 @@
             "id": "5e04760d74393032092d43fa16758f00005f3111655b42216f0116320209201d",
             "index": 9757,
             "script": {
-                "script": {
-                    "cborHex": "55b6e309b79f237ec045c34d59066e27d0559b440ed7",
-                    "description": "",
-                    "type": "PlutusScriptV2"
-                },
-                "scriptLanguage": "PlutusScriptLanguage PlutusScriptV2"
+                "cborHex": "55b6e309b79f237ec045c34d59066e27d0559b440ed7",
+                "description": "",
+                "type": "PlutusScriptV2"
             }
         },
         {
@@ -180,12 +162,9 @@
             "id": "3f522346656f785159242fd0383c236d5835046b0339532b51271b994dd0536c",
             "index": 15461,
             "script": {
-                "script": {
-                    "cborHex": "820280",
-                    "description": "",
-                    "type": "SimpleScriptV2"
-                },
-                "scriptLanguage": "SimpleScriptLanguage SimpleScriptV2"
+                "cborHex": "820280",
+                "description": "",
+                "type": "SimpleScriptV2"
             }
         },
         {
@@ -222,12 +201,9 @@
             "id": "74760d27601e6306191a7a6e69017a44e76f02c530336fac3417583d6e34e96f",
             "index": 9051,
             "script": {
-                "script": {
-                    "cborHex": "8200581c6f68bbd8d166195488ab50138f8bf68cfd44e17a3a3918ab65a8d199",
-                    "description": "",
-                    "type": "SimpleScriptV2"
-                },
-                "scriptLanguage": "SimpleScriptLanguage SimpleScriptV2"
+                "cborHex": "8200581c6f68bbd8d166195488ab50138f8bf68cfd44e17a3a3918ab65a8d199",
+                "description": "",
+                "type": "SimpleScriptV2"
             }
         }
     ],

@@ -41,8 +41,11 @@ module Cardano.Wallet.Write.Tx
     , pattern Alonzo.DatumHash
     , pattern Alonzo.NoDatum
     , datumFromBytes
-    , datumHashFromBytes
     , datumToBytes
+    , datumFromCardanoScriptData
+    , datumToCardanoScriptData
+
+    , datumHashFromBytes
     , datumHashToBytes
 
     -- ** Script
@@ -50,6 +53,8 @@ module Cardano.Wallet.Write.Tx
     , scriptFromBytes
     , scriptFromCardanoScriptInAnyLang
     , scriptToCardanoScriptInAnyLang
+    , scriptToCardanoEnvelopeJSON
+    , scriptFromCardanoEnvelopeJSON
 
     -- * TxIn
     , TxIn
@@ -71,6 +76,8 @@ import Cardano.Api
     ( AlonzoEra, BabbageEra, CardanoEra (..) )
 import Cardano.Api.Shelley
     ( ShelleyLedgerEra )
+import Cardano.Crypto.Hash
+    ( Hash (UnsafeHash) )
 import Cardano.Ledger.Crypto
     ( StandardCrypto )
 import Cardano.Ledger.Era
@@ -96,8 +103,6 @@ import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Extra as Cardano
 import qualified Cardano.Api.Shelley as Cardano
 import qualified Cardano.Binary as CBOR
-import Cardano.Crypto.Hash
-    ( Hash (UnsafeHash) )
 import qualified Cardano.Crypto.Hash.Class as Crypto
 import qualified Cardano.Ledger.Address as Ledger
 import qualified Cardano.Ledger.Alonzo.Data as Alonzo
@@ -108,6 +113,8 @@ import qualified Cardano.Ledger.Babbage.TxBody as Babbage
 import qualified Cardano.Ledger.Core as Core
 import qualified Cardano.Ledger.Shelley.UTxO as Shelley
 import qualified Cardano.Ledger.TxIn as Ledger
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
 import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
@@ -236,15 +243,81 @@ scriptToCardanoScriptInAnyLang =
     . Cardano.fromShelleyBasedScript latestEra
   where
     rewrap (Cardano.ScriptInEra _ s) = Cardano.toScriptInAnyLang s
-
     latestEra = Cardano.ShelleyBasedEraBabbage
 
+scriptToCardanoEnvelopeJSON :: Script -> Aeson.Value
+scriptToCardanoEnvelopeJSON = scriptToJSON . scriptToCardanoScriptInAnyLang
+  where
+    scriptToJSON
+        :: Cardano.ScriptInAnyLang
+        -> Aeson.Value
+    scriptToJSON (Cardano.ScriptInAnyLang l s) = Aeson.toJSON
+            $ obtainScriptLangConstraint l
+            $ Cardano.serialiseToTextEnvelope Nothing s
+      where
+        obtainScriptLangConstraint
+          :: Cardano.ScriptLanguage lang
+          -> (Cardano.IsScriptLanguage lang => a)
+          -> a
+        obtainScriptLangConstraint (Cardano.SimpleScriptLanguage Cardano.SimpleScriptV1) f = f
+        obtainScriptLangConstraint (Cardano.SimpleScriptLanguage Cardano.SimpleScriptV2) f = f
+        obtainScriptLangConstraint (Cardano.PlutusScriptLanguage Cardano.PlutusScriptV1) f = f
+        obtainScriptLangConstraint (Cardano.PlutusScriptLanguage Cardano.PlutusScriptV2) f = f
+
+scriptFromCardanoEnvelopeJSON :: Aeson.Value -> Aeson.Parser Script
+scriptFromCardanoEnvelopeJSON v = fmap scriptFromCardanoScriptInAnyLang $ do
+    envelope <- Aeson.parseJSON v
+    case textEnvelopeToScript envelope of
+      Left textEnvErr -> fail $ Cardano.displayError textEnvErr
+      Right (Cardano.ScriptInAnyLang l s) -> pure $ Cardano.ScriptInAnyLang l s
+  where
+    textEnvelopeToScript :: Cardano.TextEnvelope -> Either Cardano.TextEnvelopeError Cardano.ScriptInAnyLang
+    textEnvelopeToScript = Cardano.deserialiseFromTextEnvelopeAnyOf textEnvTypes
+     where
+      textEnvTypes :: [Cardano.FromSomeType Cardano.HasTextEnvelope Cardano.ScriptInAnyLang]
+      textEnvTypes =
+        [ Cardano.FromSomeType (Cardano.AsScript Cardano.AsSimpleScriptV1)
+                       (Cardano.ScriptInAnyLang (Cardano.SimpleScriptLanguage Cardano.SimpleScriptV1))
+        , Cardano.FromSomeType (Cardano.AsScript Cardano.AsSimpleScriptV2)
+                       (Cardano.ScriptInAnyLang (Cardano.SimpleScriptLanguage Cardano.SimpleScriptV2))
+        , Cardano.FromSomeType (Cardano.AsScript Cardano.AsPlutusScriptV1)
+                       (Cardano.ScriptInAnyLang (Cardano.PlutusScriptLanguage Cardano.PlutusScriptV1))
+        , Cardano.FromSomeType (Cardano.AsScript Cardano.AsPlutusScriptV2)
+                       (Cardano.ScriptInAnyLang (Cardano.PlutusScriptLanguage Cardano.PlutusScriptV2))
+        ]
 
 type Datum = Alonzo.Datum (Babbage.BabbageEra StandardCrypto)
 
+-- NOTE on binary format: There are a couple of related types in the ledger each
+-- with their own binary encoding. 'Plutus.Data' seems to be the type with the
+-- least amount of wrapping tags in the encoding.
+--
+-- - 'Plutus.Data' - the simplest encoding of the following options
+-- - 'Alonzo.BinaryData' - adds a preceding @24@ tag
+-- - 'Alonzo.Data' - n/a; doesn't have a ToCBOR
+-- - 'Alonzo.Datum' - adds tags to differentiate between e.g. inline datums and
+-- datum hashes. We could add helpers for this roundtrip, but they would be
+-- separate from the existing 'datum{From,To}Bytes' pair.
 datumFromBytes :: ByteString -> Either String Datum
 datumFromBytes =
     fmap Alonzo.Datum . Alonzo.makeBinaryData . toShort
+
+datumToBytes :: Alonzo.BinaryData StandardBabbage -> ByteString
+datumToBytes = CBOR.serialize' . Alonzo.getPlutusData . Alonzo.binaryDataToData
+
+datumFromCardanoScriptData
+    :: Cardano.ScriptData
+    -> Alonzo.BinaryData StandardBabbage
+datumFromCardanoScriptData =
+    Alonzo.dataToBinaryData
+    . Cardano.toAlonzoData
+
+datumToCardanoScriptData
+    :: Alonzo.BinaryData StandardBabbage
+    -> Cardano.ScriptData
+datumToCardanoScriptData =
+    Cardano.fromAlonzoData
+    . Alonzo.binaryDataToData
 
 datumHashFromBytes :: ByteString -> Maybe Datum
 datumHashFromBytes =
@@ -253,8 +326,9 @@ datumHashFromBytes =
 datumHashToBytes :: SafeHash crypto a -> ByteString
 datumHashToBytes = Crypto.hashToBytes . extractHash
 
-datumToBytes :: Alonzo.BinaryData StandardBabbage -> ByteString
-datumToBytes = CBOR.serialize'
+
+-- TODO:
+-- 1 ada <> 1 token
 
 
 -- | Union type essentially representing the union
