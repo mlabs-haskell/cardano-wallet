@@ -80,7 +80,6 @@ import Cardano.Wallet.Api.Types
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DerivationIndex (..)
     , HardDerivation (..)
-    , PaymentAddress (..)
     , Role (..)
     , WalletKey (..)
     , hex
