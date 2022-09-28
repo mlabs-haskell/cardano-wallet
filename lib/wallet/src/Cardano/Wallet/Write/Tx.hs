@@ -465,8 +465,7 @@ fromCardanoUTxO = withStandardCryptoConstraint (recentEra @era) $
 --------------------------------------------------------------------------------
 
 withStandardCryptoConstraint
-    :: IsRecentEra era
-    => RecentEra era
+    :: RecentEra era
     -> ((Crypto (Cardano.ShelleyLedgerEra era) ~ StandardCrypto) => a)
     -> a
 withStandardCryptoConstraint era a = case era of

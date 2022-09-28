@@ -1,7 +1,6 @@
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
