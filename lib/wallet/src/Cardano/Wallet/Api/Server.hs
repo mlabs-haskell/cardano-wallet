@@ -4411,7 +4411,7 @@ fromExternalInput ApiExternalInput
     , address = (ApiT addr, _)
     , amount = Quantity amt
     , assets = ApiT assets
-    , datum = ApiT datum'
+    , datum
     , script
     }
   =
@@ -4420,6 +4420,10 @@ fromExternalInput ApiExternalInput
         script' = case script of
             Just (ApiT s) -> SJust s
             Nothing -> SNothing
+
+        datum' = case datum of
+            Just (ApiT d) -> d
+            Nothing -> WriteTx.NoDatum
         addr' = toLedger addr
         val = toLedger $ TokenBundle (Coin.fromNatural amt) assets
 

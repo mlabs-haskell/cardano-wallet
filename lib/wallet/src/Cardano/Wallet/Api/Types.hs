@@ -1102,7 +1102,9 @@ data ApiExternalInput (n :: NetworkDiscriminant) = ApiExternalInput
     , address :: !(ApiT Address, Proxy n)
     , amount :: !(Quantity "lovelace" Natural)
     , assets :: !(ApiT W.TokenMap)
-    , datum :: !(ApiT WriteTx.Datum)
+    , datum :: !(Maybe (ApiT WriteTx.Datum))
+    -- NOTE: 'Nothing' is duplicating the meaning of 'WriteTx.NoDatum', however
+    -- using 'Maybe' allows the key to be omitted.
     , script :: !(Maybe (ApiT WriteTx.Script))
     } deriving (Eq, Generic, Show, Typeable)
 
