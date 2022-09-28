@@ -4037,12 +4037,14 @@ mkApiTransaction timeInterpreter wrk wid setTimeReference tx = do
     expRef <- liftIO $ traverse makeApiSlotReference' (tx ^. (#txMeta . #expiry))
 
     parsedValues <- traverse parseTxCBOR $ tx ^. #txCBOR
-    parsedCertificates <- if hasDelegation  (Proxy @s)
+    parsedCertificates <- 
+            if hasDelegation (Proxy @s)
             then traverse (getApiAnyCertificates wrk wid) parsedValues
             else pure Nothing
     parsedMintBurn <- forM parsedValues
         $ getTxApiAssetMintBurn @_ @s @k @n  wrk wid
     let parsedValidity = view #validityInterval =<< parsedValues
+        parsedIntegrity = view #scriptIntegrity =<< parsedValues
 
     return $
         apiTx
@@ -4052,6 +4054,7 @@ mkApiTransaction timeInterpreter wrk wid setTimeReference tx = do
             & #mint  .~ maybe noApiAsset fst parsedMintBurn
             & #burn  .~ maybe noApiAsset snd parsedMintBurn
             & #validityInterval .~ parsedValidity
+            & #scriptIntegrity .~ (ApiT <$> parsedIntegrity)
   where
     -- Since tx expiry can be far in the future, we use unsafeExtendSafeZone for
     -- now.
