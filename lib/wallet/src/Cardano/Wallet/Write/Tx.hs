@@ -395,8 +395,7 @@ unwrapTxOutInRecentEra era (TxOutInRecentEra babbageTxOut) = case era of
         = Right $ Alonzo.TxOut addr val (SJust dh)
 
 utxoFromTxOuts
-    :: forall era. IsRecentEra era
-    => RecentEra era
+    :: RecentEra era
     -> [(TxIn, Core.TxOut (ShelleyLedgerEra era))]
     -> (Shelley.UTxO (ShelleyLedgerEra era))
 utxoFromTxOuts era = withStandardCryptoConstraint era $

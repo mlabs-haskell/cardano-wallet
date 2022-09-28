@@ -1124,9 +1124,6 @@ instance FromJSON (ApiT WriteTx.Datum) where
       where
         maybeToParser = maybe failWithHelp pure
 
-        eitherToParser (Left e) = fail $ show e
-        eitherToParser (Right a) = pure a
-
         failWithHelp = fail $ mconcat
             [ "expected either "
             , "{\"inline\": \"<hex of valid datum cbor>\"}"

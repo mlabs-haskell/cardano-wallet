@@ -46,7 +46,7 @@ import Cardano.Address.Script
 import Cardano.Api
     ( StakeAddress, deserialiseFromRawBytes, proxyToAsType )
 import Cardano.Api.Gen
-    ( genScriptData, genScriptInAnyLang )
+    ( genScriptInAnyLang )
 import Cardano.Mnemonic
     ( CheckSumBits
     , ConsistentEntropy
@@ -220,7 +220,6 @@ import Cardano.Wallet.Api.Types.SchemaMetadata
     ( TxMetadataSchema (..), TxMetadataWithSchema (..) )
 import Cardano.Wallet.Gen
     ( genMnemonic
-    , genNatural
     , genNestedTxMetadata
     , genPercentage
     , genScript
@@ -270,7 +269,6 @@ import Cardano.Wallet.Primitive.Types
     , Settings
     , SlotId (..)
     , SlotInEpoch (..)
-    , SlotNo (..)
     , SmashServer
     , SortOrder (..)
     , StakePoolMetadata (..)
